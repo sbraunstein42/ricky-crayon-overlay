@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crayon Overlay — Demo</title>
+
+  <!-- Fake site styles (this part is NOT added to Wix — your Wix site already has its own styles) -->
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Nunito', sans-serif; background: #fffbf0; min-height: 100vh; }
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700&display=swap');
+    .fake-site { padding: 40px; max-width: 900px; margin: 0 auto; }
+    .fake-site h1 { font-family: 'Fredoka One', cursive; font-size: 2.8rem; color: #ff6b35; margin-bottom: 12px; }
+    .fake-site p { font-size: 1.1rem; color: #555; line-height: 1.7; margin-bottom: 20px; }
+    .card-row { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+    .card { flex: 1; min-width: 180px; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,.08); text-align: center; }
+    .card .emoji { font-size: 2.5rem; }
+    .card h3 { font-family: 'Fredoka One', cursive; color: #333; margin-top: 8px; }
+    .card p { font-size: .9rem; color: #888; margin: 0; }
+  </style>
+
+  <!-- ↓↓ This is the part that DOES get added to Wix ↓↓ -->
+  <link rel="stylesheet" href="crayon.css">
+</head>
+<body>
+
+  <!-- Fake Wix site content -->
+  <div class="fake-site">
+    <h1>🌟 Welcome to Our Kids' World!</h1>
+    <p>This is a sample Wix website. The crayon drawing tool lives on top of it — kids can scribble, doodle, and colour all over the page without changing anything underneath. Hit <strong>"Start Drawing"</strong> in the toolbar below!</p>
+    <div class="card-row">
+      <div class="card"><div class="emoji">🦁</div><h3>Animals</h3><p>Meet our furry friends</p></div>
+      <div class="card"><div class="emoji">🎨</div><h3>Art Class</h3><p>Creative fun every day</p></div>
+      <div class="card"><div class="emoji">🚀</div><h3>Space</h3><p>Explore the galaxy</p></div>
+      <div class="card"><div class="emoji">🌈</div><h3>Rainbow Lab</h3><p>Colours & science</p></div>
+    </div>
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum. Donec in efficitur leo, in commodo odio. Sed sit amet malesuada ex, a imperdiet diam. Nulla facilisi.</p>
+    <p>Phasellus euismod velit at lorem viverra, vel egestas orci cursus. Integer vel mi convallis, condimentum est in, malesuada metus. Cras at nibh sed arcu vestibulum convallis ut ac eros.</p>
+  </div>
+
+  <!-- ↓↓ This is the part that DOES get added to Wix ↓↓ -->
+  <canvas id="crayon-canvas"></canvas>
+  <div id="crayon-cursor">🖍️</div>
+  <div id="hint">🖍️ Press <strong>Start Drawing</strong> below to colour this page!</div>
+  <div id="crayon-toolbar">
+    <span class="tb-label">🖍️ Crayons</span>
+    <div class="divider"></div>
+    <div id="swatches" style="display:flex; gap:7px; align-items:center; flex-wrap:wrap;"></div>
+    <div class="divider"></div>
+    <div id="sizes" style="display:flex; gap:7px; align-items:center;"></div>
+    <div class="divider"></div>
+    <button id="draw-toggle">✏️ Start Drawing</button>
+    <button id="clear-btn">🗑️ Clear</button>
+  </div>
+
+  <script src="crayon.js"></script>
+</body>
+</html>
