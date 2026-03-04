@@ -12,7 +12,7 @@
   cursor: none;
 }
 
-/* ── CRAYON RACK — left side, middle ── */
+/* ── CRAYON RACK — left edge, vertically centered ── */
 #crayon-rack {
   position: fixed;
   left: 0;
@@ -21,116 +21,68 @@
   z-index: 10000;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 0;
-  transition: opacity 0.3s;
+  gap: 4px;
+  padding: 8px 0;
+  transition: opacity 0.3s, pointer-events 0.3s;
 }
 
-/* Each crayon is diagonal, peeking tip-first from the left edge */
+/* Each crayon: SVG image, rotated so tip points right, mostly off-screen */
 .crayon {
-  position: relative;
-  width: 90px;
-  height: 22px;
-  border-radius: 0 4px 4px 0;
+  display: block;
+  width: 130px;
+  height: 36px;
   cursor: pointer;
-  background: var(--c);
-  transform: translateX(-62px) rotate(-8deg);   /* mostly hidden, slight angle */
+  transform: translateX(-88px) rotate(-6deg);
   transform-origin: left center;
-  transition: transform 0.25s cubic-bezier(.34,1.56,.64,1),
+  transition: transform 0.28s cubic-bezier(.34,1.56,.64,1),
               filter 0.2s;
-  box-shadow: inset 0 3px 5px rgba(255,255,255,0.25),
-              inset 0 -3px 5px rgba(0,0,0,0.15),
-              2px 2px 8px rgba(0,0,0,0.2);
+  filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.25));
 }
 
-/* pointed tip on the right (the part you see) */
-.crayon::after {
-  content: '';
-  position: absolute;
-  right: -12px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 0; height: 0;
-  border-top: 11px solid transparent;
-  border-bottom: 11px solid transparent;
-  border-left: 13px solid var(--c);
-  filter: brightness(0.72);
-}
-
-/* paper label */
-.crayon::before {
-  content: '';
-  position: absolute;
-  left: 8px; top: 0; bottom: 0;
-  width: 32px;
-  background: rgba(255,255,255,0.22);
-  border-left: 1px solid rgba(255,255,255,0.3);
-  border-right: 1px solid rgba(0,0,0,0.08);
-}
-
-/* shine */
-.crayon-shine {
-  position: absolute;
-  top: 3px; left: 10px;
-  width: 28px; height: 4px;
-  background: linear-gradient(to right, rgba(255,255,255,0.45), transparent);
-  border-radius: 2px;
-  pointer-events: none;
-}
-
-/* hover: slide out more */
 .crayon:hover {
-  transform: translateX(-28px) rotate(-8deg);
-  filter: brightness(1.08);
+  transform: translateX(-44px) rotate(-3deg);
+  filter: drop-shadow(3px 3px 8px rgba(0,0,0,0.3));
 }
 
-/* active/selected: fully out, no rotation */
 .crayon.active {
-  transform: translateX(-18px) rotate(0deg);
-  filter: brightness(1.15) drop-shadow(2px 0 8px rgba(0,0,0,0.25));
+  transform: translateX(-16px) rotate(0deg);
+  filter: drop-shadow(3px 3px 10px rgba(0,0,0,0.35)) brightness(1.1);
 }
 
-/* ── STOP BUTTON — shown while drawing ── */
-#stop-btn {
+/* ── STOP / CLEAR BUTTONS ── */
+#stop-btn, #clear-btn {
   position: fixed;
   left: 16px;
-  top: 50%;
-  transform: translateY(-50%);
   z-index: 10000;
   font-family: 'Fredoka One', cursive;
   font-size: .9rem;
-  padding: 10px 18px;
+  padding: 10px 20px;
   border-radius: 999px;
-  border: none;
   cursor: pointer;
-  background: #ef233c;
-  color: white;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.22);
-  transition: background .2s, transform .15s;
-  display: none;
-}
-#stop-btn:hover { background: #d62839; transform: translateY(-50%) scale(1.06); }
-
-/* ── CLEAR BUTTON — shown while drawing ── */
-#clear-btn {
-  position: fixed;
-  left: 16px;
-  top: calc(50% + 52px);
-  transform: translateY(-50%);
-  z-index: 10000;
-  font-family: 'Fredoka One', cursive;
-  font-size: .9rem;
-  padding: 10px 18px;
-  border-radius: 999px;
-  border: 2px solid #ddd;
-  cursor: pointer;
-  background: white;
-  color: #888;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
   transition: all .2s;
   display: none;
+  white-space: nowrap;
 }
-#clear-btn:hover { background: #fff0f0; border-color: #ef233c; color: #ef233c; }
+
+#stop-btn {
+  top: calc(50% - 28px);
+  transform: translateY(-50%);
+  background: #ef233c;
+  color: white;
+  border: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+#stop-btn:hover { background: #d62839; transform: translateY(-50%) scale(1.05); }
+
+#clear-btn {
+  top: calc(50% + 28px);
+  transform: translateY(-50%);
+  background: white;
+  color: #888;
+  border: 2px solid #ddd;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+#clear-btn:hover { background: #fff0f0; border-color: #ef233c; color: #ef233c; transform: translateY(-50%) scale(1.05); }
 
 /* ── CUSTOM CURSOR ── */
 #crayon-cursor {
@@ -147,13 +99,13 @@
 #hint {
   position: fixed;
   left: 20px;
-  top: 30px;
+  top: 24px;
   z-index: 10000;
   background: #ffd166;
   color: #333;
   font-family: 'Fredoka One', cursive;
   font-size: .85rem;
-  padding: 10px 16px;
+  padding: 9px 16px;
   border-radius: 14px;
   box-shadow: 0 4px 16px rgba(0,0,0,.15);
   text-align: center;

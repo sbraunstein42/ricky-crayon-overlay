@@ -11,40 +11,127 @@
   let drawing = false;
   let isDown  = false;
   let lastX   = 0, lastY = 0;
-  let color   = '#ef233c';
+  let color   = '#e63946';
   const brushSize = 14;
 
+  // ── Stroke storage ───────────────────────────────────────────────────────
+  // Each stroke is { color, size, points: [{x, y}] }
+  // Points are stored in PAGE space (i.e. scrollY already added in),
+  // so they stay anchored to the content as the user scrolls.
+  let strokes     = [];
+  let activeStroke = null;
+
+  // ── Crayon definitions ───────────────────────────────────────────────────
   const CRAYONS = [
-    { color: '#ef233c', name: 'Red'    },
-    { color: '#ff6b35', name: 'Orange' },
-    { color: '#ffd166', name: 'Yellow' },
-    { color: '#06d6a0', name: 'Green'  },
-    { color: '#118ab2', name: 'Blue'   },
-    { color: '#7b2d8b', name: 'Purple' },
-    { color: '#ffffff', name: 'White'  },
-    { color: '#222222', name: 'Black'  },
+    { color: '#e63946', dark: '#9d0208', label: '#fff', name: 'Red'    },
+    { color: '#fb5607', dark: '#c44b06', label: '#fff', name: 'Orange' },
+    { color: '#ffbe0b', dark: '#c9960a', label: '#333', name: 'Yellow' },
+    { color: '#06d6a0', dark: '#049a73', label: '#fff', name: 'Green'  },
+    { color: '#118ab2', dark: '#0a6282', label: '#fff', name: 'Blue'   },
+    { color: '#7b2d8b', dark: '#4a1a54', label: '#fff', name: 'Purple' },
+    { color: '#cccccc', dark: '#999999', label: '#555', name: 'White'  },
+    { color: '#333333', dark: '#111111', label: '#fff', name: 'Black'  },
   ];
+  
 
   // ── Canvas resize ────────────────────────────────────────────────────────
   function resizeCanvas() {
-    const saved = ctx.getImageData(0, 0, canvas.width, canvas.height);
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
-    ctx.putImageData(saved, 0, 0);
+    // no need to preserve imageData — the RAF loop redraws everything
   }
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
 
-  // ── Build crayons ────────────────────────────────────────────────────────
-  CRAYONS.forEach(cr => {
+  // ── Redraw loop ──────────────────────────────────────────────────────────
+  // Runs every frame. Clears the canvas and redraws all stored strokes
+  // offset by the current scroll position, so marks appear glued to the page.
+  function redraw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const scrollY = window.scrollY;
+    const scrollX = window.scrollX;
+
+    for (const stroke of strokes) {
+      if (stroke.points.length < 2) continue;
+      drawStoredStroke(stroke, scrollX, scrollY);
+    }
+
+    requestAnimationFrame(redraw);
+  }
+  requestAnimationFrame(redraw);
+
+  // ── Render a stored stroke offset by scroll ──────────────────────────────
+  function drawStoredStroke(stroke, scrollX, scrollY) {
+    const pts    = stroke.points;
+    const size   = stroke.size;
+    const jitter = size * 0.35;
+
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.lineWidth   = size;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.strokeStyle = stroke.color;
+
+    // Seed random per-stroke so texture is stable across redraws
+    let seed = stroke.seed;
+    const rand = () => { seed = (seed * 16807 + 0) % 2147483647; return (seed - 1) / 2147483646; };
+
+    for (let layer = 0; layer < 4; layer++) {
+      ctx.beginPath();
+      const p0 = pts[0];
+      ctx.moveTo(p0.x - scrollX + (rand()-.5)*jitter,
+                 p0.y - scrollY + (rand()-.5)*jitter);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i].x - scrollX + (rand()-.5)*jitter,
+                   pts[i].y - scrollY + (rand()-.5)*jitter);
+      }
+      ctx.stroke();
+    }
+
+    // grain dots
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle   = stroke.color;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const x0 = pts[i].x,   y0 = pts[i].y;
+      const x1 = pts[i+1].x, y1 = pts[i+1].y;
+      const dist = Math.hypot(x1-x0, y1-y0);
+      for (let g = 0; g < dist * 0.6; g++) {
+        const t = rand();
+        ctx.beginPath();
+        ctx.arc(
+          x0+(x1-x0)*t+(rand()-.5)*size*0.8 - scrollX,
+          y0+(y1-y0)*t+(rand()-.5)*size*0.8 - scrollY,
+          rand()*size*0.25, 0, Math.PI*2
+        );
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // ── Load SVG template then build crayons ─────────────────────────────────
+  fetch('crayon-template.svg')
+    .then(r => r.text())
+    .then(template => CRAYONS.forEach(cr => buildCrayon(cr, template)))
+    .catch(()      => CRAYONS.forEach(cr => buildCrayon(cr, null)));
+
+  function buildCrayon(cr, template) {
     const el = document.createElement('div');
     el.className = 'crayon';
-    el.style.setProperty('--c', cr.color);
-    el.title = cr.name;
+    el.title     = cr.name;
 
-    const shine = document.createElement('div');
-    shine.className = 'crayon-shine';
-    el.appendChild(shine);
+    if (template) {
+      el.innerHTML = template
+        .replaceAll('{{COLOR}}', cr.color)
+        .replaceAll('{{DARK}}',  cr.dark)
+        .replaceAll('{{LABEL}}', cr.label)
+        .replaceAll('{{NAME}}',  cr.name);
+    } else {
+      el.style.background = cr.color;
+      el.style.width = '130px';
+      el.style.height = '32px';
+    }
 
     el.addEventListener('click', () => {
       color = cr.color;
@@ -54,7 +141,7 @@
     });
 
     rack.appendChild(el);
-  });
+  }
 
   // ── Draw mode ────────────────────────────────────────────────────────────
   function startDrawing() {
@@ -72,6 +159,7 @@
   function stopDrawing() {
     drawing = false;
     isDown  = false;
+    activeStroke = null;
     canvas.style.pointerEvents = 'none';
     cursor.style.display       = 'none';
     document.body.style.cursor = '';
@@ -82,55 +170,19 @@
     document.querySelectorAll('.crayon').forEach(c => c.classList.remove('active'));
   }
 
-  stopBtn.addEventListener('click', stopDrawing);
-  clearBtn.addEventListener('click', () => ctx.clearRect(0, 0, canvas.width, canvas.height));
+  stopBtn.addEventListener('click',  stopDrawing);
+  clearBtn.addEventListener('click', () => { strokes = []; activeStroke = null; });
   setTimeout(() => hint.classList.add('hidden'), 5000);
 
-  // ── Crayon stroke ────────────────────────────────────────────────────────
-  function crayonStroke(x0, y0, x1, y1) {
-    const dist   = Math.hypot(x1-x0, y1-y0);
-    const steps  = Math.max(1, Math.floor(dist/2));
-    const jitter = brushSize * 0.35;
-
-    ctx.save();
-    ctx.globalAlpha = 0.18;
-    ctx.lineWidth   = brushSize;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-    ctx.strokeStyle = color;
-
-    for (let layer = 0; layer < 4; layer++) {
-      ctx.beginPath();
-      ctx.moveTo(x0+(Math.random()-.5)*jitter, y0+(Math.random()-.5)*jitter);
-      for (let s = 1; s <= steps; s++) {
-        const t = s/steps;
-        ctx.lineTo(
-          x0+(x1-x0)*t+(Math.random()-.5)*jitter,
-          y0+(y1-y0)*t+(Math.random()-.5)*jitter
-        );
-      }
-      ctx.stroke();
-    }
-
-    ctx.globalAlpha = 0.08;
-    ctx.fillStyle   = color;
-    for (let g = 0; g < dist*0.6; g++) {
-      const t = Math.random();
-      ctx.beginPath();
-      ctx.arc(
-        x0+(x1-x0)*t+(Math.random()-.5)*brushSize*0.8,
-        y0+(y1-y0)*t+(Math.random()-.5)*brushSize*0.8,
-        Math.random()*brushSize*0.25, 0, Math.PI*2
-      );
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
   // ── Pointer events ────────────────────────────────────────────────────────
+  // Coordinates are converted to page-space by adding scrollY/scrollX
   function getPos(e) {
-    if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    return { x: e.clientX, y: e.clientY };
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: clientX + window.scrollX,
+      y: clientY + window.scrollY,
+    };
   }
 
   canvas.addEventListener('pointerdown', e => {
@@ -138,20 +190,28 @@
     isDown = true;
     const p = getPos(e);
     lastX = p.x; lastY = p.y;
-    crayonStroke(p.x, p.y, p.x+.1, p.y+.1);
+    // start a new stroke
+    activeStroke = { color, size: brushSize, seed: Math.floor(Math.random() * 1e9), points: [p] };
+    strokes.push(activeStroke);
   });
 
   canvas.addEventListener('pointermove', e => {
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    cursor.style.left = clientX + 'px';
+    cursor.style.top  = clientY + 'px';
+
+    if (!drawing || !isDown || !activeStroke) return;
     const p = getPos(e);
-    cursor.style.left = p.x + 'px';
-    cursor.style.top  = p.y + 'px';
-    if (!drawing || !isDown) return;
-    crayonStroke(lastX, lastY, p.x, p.y);
-    lastX = p.x; lastY = p.y;
+    // only add a point if we've moved enough (reduces point count)
+    if (Math.hypot(p.x - lastX, p.y - lastY) > 2) {
+      activeStroke.points.push(p);
+      lastX = p.x; lastY = p.y;
+    }
   });
 
-  canvas.addEventListener('pointerup',    () => { isDown = false; });
-  canvas.addEventListener('pointerleave', () => { isDown = false; });
+  canvas.addEventListener('pointerup',    () => { isDown = false; activeStroke = null; });
+  canvas.addEventListener('pointerleave', () => { isDown = false; activeStroke = null; });
 
   window.addEventListener('mousemove', e => {
     if (drawing) return;
