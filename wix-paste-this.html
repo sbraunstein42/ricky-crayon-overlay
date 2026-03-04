@@ -1,48 +1,16 @@
 <!--
   ============================================================
-  CRAYON DRAWING OVERLAY — paste this into Wix Custom Code
-  ============================================================
-  HOW TO ADD TO WIX:
-    1. In the Wix Editor, go to:
-       Settings → Custom Code → + Add Custom Code
-    2. Paste this ENTIRE file into the code box
-    3. Set "Add Code to Pages" → All Pages
-    4. Set "Place Code in" → Head
-    5. Click Apply — you're done!
+  CRAYON DRAWING OVERLAY — paste into Wix Custom Code (Head)
   ============================================================
 -->
+<link rel="stylesheet" href="https://sbraunstein42.github.io/ricky-crayon-overlay/crayon.css">
 
-<!-- Load the crayon styles -->
-<link rel="stylesheet" href="crayon.css">
-
-<!-- Drawing canvas (invisible layer over your site) -->
 <canvas id="crayon-canvas"></canvas>
-
-<!-- Crayon emoji that follows the mouse -->
 <div id="crayon-cursor">🖍️</div>
+<div id="hint">👈 Pick a crayon!</div>
 
-<!-- Tip badge shown to new visitors -->
-<div id="hint">🖍️ Press <strong>Start Drawing</strong> below to colour this page!</div>
+<div id="crayon-rack"></div>
+<button id="stop-btn">🛑 Stop Drawing</button>
+<button id="clear-btn">🗑️ Clear</button>
 
-<!-- Floating toolbar -->
-<div id="crayon-toolbar">
-  <span class="tb-label">🖍️ Crayons</span>
-
-  <div class="divider"></div>
-
-  <!-- Colour swatches (filled in automatically by crayon.js) -->
-  <div id="swatches" style="display:flex; gap:7px; align-items:center; flex-wrap:wrap;"></div>
-
-  <div class="divider"></div>
-
-  <!-- Brush size buttons (filled in automatically by crayon.js) -->
-  <div id="sizes" style="display:flex; gap:7px; align-items:center;"></div>
-
-  <div class="divider"></div>
-
-  <button id="draw-toggle">✏️ Start Drawing</button>
-  <button id="clear-btn">🗑️ Clear</button>
-</div>
-
-<!-- Load the crayon drawing logic -->
-<script src="crayon.js"></script>
+<script src="https://sbraunstein42.github.io/ricky-crayon-overlay/crayon.js"></script>

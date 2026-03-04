@@ -1,43 +1,31 @@
 (function () {
 
-  // ── Grab elements from the page ──────────────────────────────────────────
   const canvas   = document.getElementById('crayon-canvas');
   const ctx      = canvas.getContext('2d');
   const cursor   = document.getElementById('crayon-cursor');
-  const toggle   = document.getElementById('draw-toggle');
+  const stopBtn  = document.getElementById('stop-btn');
   const clearBtn = document.getElementById('clear-btn');
+  const rack     = document.getElementById('crayon-rack');
   const hint     = document.getElementById('hint');
 
-  // ── State ────────────────────────────────────────────────────────────────
-  let drawing   = false;  // is draw mode currently on?
-  let isDown    = false;  // is the mouse/finger pressed right now?
-  let lastX     = 0;
-  let lastY     = 0;
-  let color     = '#ef233c';  // default: red crayon
-  let brushSize = 14;         // default: medium
+  let drawing = false;
+  let isDown  = false;
+  let lastX   = 0, lastY = 0;
+  let color   = '#ef233c';
+  const brushSize = 14;
 
-  // ── Crayon colour palette ────────────────────────────────────────────────
-  const COLORS = [
-    '#ef233c',  // red
-    '#ff6b35',  // orange
-    '#ffd166',  // yellow
-    '#06d6a0',  // green
-    '#118ab2',  // blue
-    '#7b2d8b',  // purple
-    '#ffffff',  // white
-    '#111111',  // black
+  const CRAYONS = [
+    { color: '#ef233c', name: 'Red'    },
+    { color: '#ff6b35', name: 'Orange' },
+    { color: '#ffd166', name: 'Yellow' },
+    { color: '#06d6a0', name: 'Green'  },
+    { color: '#118ab2', name: 'Blue'   },
+    { color: '#7b2d8b', name: 'Purple' },
+    { color: '#ffffff', name: 'White'  },
+    { color: '#222222', name: 'Black'  },
   ];
-
-  // ── Brush size options ───────────────────────────────────────────────────
-  const SIZES = [
-    { label: 'Small',  d: 8,  dot: 6  },
-    { label: 'Medium', d: 14, dot: 10 },
-    { label: 'Large',  d: 22, dot: 16 },
-  ];
-
 
   // ── Canvas resize ────────────────────────────────────────────────────────
-  // Keeps the canvas filling the whole window; preserves existing drawings.
   function resizeCanvas() {
     const saved = ctx.getImageData(0, 0, canvas.width, canvas.height);
     canvas.width  = window.innerWidth;
@@ -47,168 +35,126 @@
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
 
+  // ── Build crayons ────────────────────────────────────────────────────────
+  CRAYONS.forEach(cr => {
+    const el = document.createElement('div');
+    el.className = 'crayon';
+    el.style.setProperty('--c', cr.color);
+    el.title = cr.name;
 
-  // ── Build colour swatches in the toolbar ─────────────────────────────────
-  const swatchContainer = document.getElementById('swatches');
+    const shine = document.createElement('div');
+    shine.className = 'crayon-shine';
+    el.appendChild(shine);
 
-  COLORS.forEach(c => {
-    const swatch = document.createElement('div');
-    swatch.className = 'swatch' + (c === color ? ' active' : '');
-    swatch.style.background = c;
-
-    // white swatch needs a visible border so it doesn't disappear
-    if (c === '#ffffff') swatch.style.boxShadow = 'inset 0 0 0 2px #ccc';
-
-    swatch.addEventListener('click', () => {
-      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-      swatch.classList.add('active');
-      color = c;
+    el.addEventListener('click', () => {
+      color = cr.color;
+      document.querySelectorAll('.crayon').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      startDrawing();
     });
 
-    swatchContainer.appendChild(swatch);
+    rack.appendChild(el);
   });
 
-
-  // ── Build brush-size buttons in the toolbar ──────────────────────────────
-  const sizeContainer = document.getElementById('sizes');
-
-  SIZES.forEach(sz => {
-    const btn = document.createElement('button');
-    btn.className    = 'size-btn' + (sz.d === brushSize ? ' active' : '');
-    btn.style.width  = (sz.d + 16) + 'px';
-    btn.style.height = (sz.d + 16) + 'px';
-    btn.title        = sz.label;
-
-    // visual dot inside the button
-    const dot = document.createElement('div');
-    dot.className    = 'dot';
-    dot.style.width  = sz.dot + 'px';
-    dot.style.height = sz.dot + 'px';
-    btn.appendChild(dot);
-
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      brushSize = sz.d;
-    });
-
-    sizeContainer.appendChild(btn);
-  });
-
-
-  // ── Draw-mode toggle ─────────────────────────────────────────────────────
-  toggle.addEventListener('click', () => {
-    drawing = !drawing;
-
-    // allow/block mouse events on the canvas
-    canvas.style.pointerEvents = drawing ? 'all' : 'none';
-
-    // show/hide custom crayon cursor
-    cursor.style.display       = drawing ? 'block' : 'none';
-    document.body.style.cursor = drawing ? 'none'  : '';
-
-    // update button label & colour
-    toggle.textContent = drawing ? '🛑 Stop Drawing' : '✏️ Start Drawing';
-    toggle.classList.toggle('drawing', drawing);
-
-    // hide the hint tip
+  // ── Draw mode ────────────────────────────────────────────────────────────
+  function startDrawing() {
+    drawing = true;
+    canvas.style.pointerEvents = 'all';
+    cursor.style.display       = 'block';
+    document.body.style.cursor = 'none';
+    rack.style.opacity         = '0';
+    rack.style.pointerEvents   = 'none';
+    stopBtn.style.display      = 'block';
+    clearBtn.style.display     = 'block';
     hint.classList.add('hidden');
-  });
+  }
 
+  function stopDrawing() {
+    drawing = false;
+    isDown  = false;
+    canvas.style.pointerEvents = 'none';
+    cursor.style.display       = 'none';
+    document.body.style.cursor = '';
+    rack.style.opacity         = '1';
+    rack.style.pointerEvents   = 'auto';
+    stopBtn.style.display      = 'none';
+    clearBtn.style.display     = 'none';
+    document.querySelectorAll('.crayon').forEach(c => c.classList.remove('active'));
+  }
 
-  // ── Clear button ─────────────────────────────────────────────────────────
-  clearBtn.addEventListener('click', () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  });
-
-
-  // ── Auto-hide the hint after 5 seconds ───────────────────────────────────
+  stopBtn.addEventListener('click', stopDrawing);
+  clearBtn.addEventListener('click', () => ctx.clearRect(0, 0, canvas.width, canvas.height));
   setTimeout(() => hint.classList.add('hidden'), 5000);
 
-
-  // ── Core drawing: textured crayon stroke ─────────────────────────────────
-  // Draws from (x0,y0) to (x1,y1) with a waxy, grainy crayon look.
+  // ── Crayon stroke ────────────────────────────────────────────────────────
   function crayonStroke(x0, y0, x1, y1) {
-    const dist   = Math.hypot(x1 - x0, y1 - y0);
-    const steps  = Math.max(1, Math.floor(dist / 2));
-    const jitter = brushSize * 0.35;  // how wobbly the stroke edges are
+    const dist   = Math.hypot(x1-x0, y1-y0);
+    const steps  = Math.max(1, Math.floor(dist/2));
+    const jitter = brushSize * 0.35;
 
     ctx.save();
-    ctx.globalAlpha = 0.18;   // semi-transparent so layers build up
+    ctx.globalAlpha = 0.18;
     ctx.lineWidth   = brushSize;
     ctx.lineCap     = 'round';
     ctx.lineJoin    = 'round';
     ctx.strokeStyle = color;
 
-    // Draw 4 slightly-offset strokes to simulate wax texture
     for (let layer = 0; layer < 4; layer++) {
       ctx.beginPath();
-      ctx.moveTo(
-        x0 + (Math.random() - .5) * jitter,
-        y0 + (Math.random() - .5) * jitter
-      );
+      ctx.moveTo(x0+(Math.random()-.5)*jitter, y0+(Math.random()-.5)*jitter);
       for (let s = 1; s <= steps; s++) {
-        const t  = s / steps;
-        const mx = x0 + (x1 - x0) * t + (Math.random() - .5) * jitter;
-        const my = y0 + (y1 - y0) * t + (Math.random() - .5) * jitter;
-        ctx.lineTo(mx, my);
+        const t = s/steps;
+        ctx.lineTo(
+          x0+(x1-x0)*t+(Math.random()-.5)*jitter,
+          y0+(y1-y0)*t+(Math.random()-.5)*jitter
+        );
       }
       ctx.stroke();
     }
 
-    // Scatter tiny dots along the path for paper-grain texture
     ctx.globalAlpha = 0.08;
     ctx.fillStyle   = color;
-    for (let g = 0; g < dist * 0.6; g++) {
-      const t  = Math.random();
-      const gx = x0 + (x1 - x0) * t + (Math.random() - .5) * brushSize * 0.8;
-      const gy = y0 + (y1 - y0) * t + (Math.random() - .5) * brushSize * 0.8;
-      const r  = Math.random() * brushSize * 0.25;
+    for (let g = 0; g < dist*0.6; g++) {
+      const t = Math.random();
       ctx.beginPath();
-      ctx.arc(gx, gy, r, 0, Math.PI * 2);
+      ctx.arc(
+        x0+(x1-x0)*t+(Math.random()-.5)*brushSize*0.8,
+        y0+(y1-y0)*t+(Math.random()-.5)*brushSize*0.8,
+        Math.random()*brushSize*0.25, 0, Math.PI*2
+      );
       ctx.fill();
     }
-
     ctx.restore();
   }
 
-
-  // ── Pointer position helper (works for mouse and touch) ──────────────────
+  // ── Pointer events ────────────────────────────────────────────────────────
   function getPos(e) {
     if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
     return { x: e.clientX, y: e.clientY };
   }
 
-
-  // ── Canvas pointer events ─────────────────────────────────────────────────
   canvas.addEventListener('pointerdown', e => {
     if (!drawing) return;
     isDown = true;
     const p = getPos(e);
-    lastX = p.x;
-    lastY = p.y;
-    crayonStroke(p.x, p.y, p.x + .1, p.y + .1);  // dot on single tap/click
+    lastX = p.x; lastY = p.y;
+    crayonStroke(p.x, p.y, p.x+.1, p.y+.1);
   });
 
   canvas.addEventListener('pointermove', e => {
     const p = getPos(e);
-
-    // always move the custom cursor emoji
     cursor.style.left = p.x + 'px';
     cursor.style.top  = p.y + 'px';
-
     if (!drawing || !isDown) return;
     crayonStroke(lastX, lastY, p.x, p.y);
-    lastX = p.x;
-    lastY = p.y;
+    lastX = p.x; lastY = p.y;
   });
 
   canvas.addEventListener('pointerup',    () => { isDown = false; });
   canvas.addEventListener('pointerleave', () => { isDown = false; });
 
-  // Track cursor position even when draw mode is off (canvas doesn't receive events then)
   window.addEventListener('mousemove', e => {
-    if (drawing) return;  // canvas already handles it above
+    if (drawing) return;
     cursor.style.left = e.clientX + 'px';
     cursor.style.top  = e.clientY + 'px';
   });
