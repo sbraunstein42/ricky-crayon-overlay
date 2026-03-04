@@ -52,6 +52,6 @@ window.CRAYON_TEMPLATE = `
   <rect x="116" y="2" width="8" height="28"
         fill="{{DARK}}" opacity="0.55"
         rx="0" ry="0"/>
-  <rect x="118" y="2" width="6" height="28" rx="0 4 4 0"
+  <rect x="118" y="2" width="6" height="28"
         fill="{{DARK}}" opacity="0.3"/>
 </svg>`;
