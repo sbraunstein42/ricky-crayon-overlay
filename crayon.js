@@ -160,26 +160,26 @@
     sctx.restore();
   }
 
-  // ── Load SVG template then build crayons ─────────────────────────────────
-  fetch('crayon-template.svg')
-    .then(r => r.text())
-    .then(template => CRAYONS.forEach(cr => buildCrayon(cr, template)))
-    .catch(()      => CRAYONS.forEach(cr => buildCrayon(cr, null)));
+  // ── Build crayons from template in crayon-template.js ────────────────────
+  CRAYONS.forEach(cr => buildCrayon(cr));
 
-  function buildCrayon(cr, template) {
+  function buildCrayon(cr) {
     const el = document.createElement('div');
     el.className = 'crayon';
     el.title     = cr.name;
 
+    const template = window.CRAYON_TEMPLATE;
     if (template) {
+      const id = cr.name.toLowerCase();
       el.innerHTML = template
+        .replaceAll('{{ID}}',    id)
         .replaceAll('{{COLOR}}', cr.color)
         .replaceAll('{{DARK}}',  cr.dark)
         .replaceAll('{{LABEL}}', cr.label)
         .replaceAll('{{NAME}}',  cr.name);
     } else {
       el.style.background = cr.color;
-      el.style.width = '130px';
+      el.style.width  = '130px';
       el.style.height = '32px';
     }
 
