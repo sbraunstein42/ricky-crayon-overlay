@@ -100,12 +100,15 @@
   //   - slightly fuzzy/uneven edges
   //   - paper texture showing through as tiny gaps (grain)
   //
-  // We achieve this with two layers:
+  // We achieve this with three layers:
   //   1. A solid smooth path at ~0.68 opacity (the main wax body)
-  //   2. Many tiny dots (1–2px) scattered within the stroke width, each at
-  //      very low opacity (0.05–0.14), creating the grainy, papery look
+  //   2. A second path drawn over the same route but with each point jittered
+  //      slightly perpendicular to the travel direction — at wider lineWidth and
+  //      lower opacity, this roughens the edges without any extra draw calls per
+  //      point (still a single O(n) path, very cheap)
+  //   3. Tiny dots within the stroke width at very low opacity (grain/texture)
   //
-  // The seed makes grain positions deterministic so scratch redraws are stable.
+  // The seed makes all randomness deterministic so scratch redraws are stable.
   //
   function drawCrayonStroke(ctx2d, pts, strokeColor, size, seed) {
     if (pts.length < 1) return;
@@ -130,7 +133,33 @@
       ctx2d.restore();
     }
 
-    // 2. Grain — tiny dots scattered within the stroke area
+    // 2. Jagged-edge pass — same path but each point nudged perpendicular to
+    //    travel direction by a seeded random amount. Drawn wider + semi-transparent
+    //    so it bleeds outside the main stroke and breaks up the clean edge.
+    if (pts.length >= 2) {
+      ctx2d.save();
+      ctx2d.globalAlpha = 0.30;
+      ctx2d.lineWidth   = size * 1.22;
+      ctx2d.lineCap     = 'round';
+      ctx2d.lineJoin    = 'round';
+      ctx2d.strokeStyle = strokeColor;
+      ctx2d.beginPath();
+      ctx2d.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) {
+        const dx  = pts[i].x - pts[i-1].x;
+        const dy  = pts[i].y - pts[i-1].y;
+        const len = Math.hypot(dx, dy) || 1;
+        // Perpendicular unit vector
+        const px  = -dy / len;
+        const py  =  dx / len;
+        const jitter = (seededRand(seed + i * 2 + 77) - 0.5) * size * 0.45;
+        ctx2d.lineTo(pts[i].x + px * jitter, pts[i].y + py * jitter);
+      }
+      ctx2d.stroke();
+      ctx2d.restore();
+    }
+
+    // 3. Grain — tiny dots scattered within the stroke area
     // 6 grains per sampled point, placed randomly within a circle of radius ≈ brushSize/2
     const GRAINS = 1;
     const grainR = 1.3;

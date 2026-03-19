@@ -28,11 +28,18 @@
 
 /* Each crayon: sprite image, mostly off-screen with tip pointing right.
    width:max-content + % translateX means positioning adapts to the sprite's
-   actual rendered width, whatever it turns out to be. */
+   actual rendered width, whatever it turns out to be.
+   --crayon-overlap: how many px each crayon overlaps the one below it.
+   Increase to pack them tighter, decrease to spread them out. */
+:root {
+  --crayon-overlap: 70px;
+}
+
 .crayon {
   display: block;
   height: 100px;
   width: max-content;
+  margin-bottom: calc(-1 * var(--crayon-overlap));
   cursor: pointer;
   transform: translateX(68%) rotate(96deg);
   transform-origin: left center;
