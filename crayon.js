@@ -1,5 +1,9 @@
 (function () {
 
+  // ── Sprite base URL (resolves relative to this script, works locally + GitHub Pages) ──
+  const _s = document.currentScript;
+  const SPRITE_BASE = _s ? _s.src.replace(/\/[^\/]+$/, '/') + 'sprites/' : 'sprites/';
+
   const canvas   = document.getElementById('crayon-canvas');
   const ctx      = canvas.getContext('2d');
   const cursor   = document.getElementById('crayon-cursor');
@@ -11,7 +15,7 @@
   let drawing     = false;
   let isDown      = false;
   let lastX       = 0, lastY = 0;
-  let color       = '#e63946';
+  let color       = '#d93025';
   const brushSize = 14;
 
   // ── Three canvases ───────────────────────────────────────────────────────
@@ -35,14 +39,15 @@
 
   // ── Crayon definitions ───────────────────────────────────────────────────
   const CRAYONS = [
-    { color: '#e63946', dark: '#9d0208', label: '#fff', name: 'Red'    },
-    { color: '#fb5607', dark: '#c44b06', label: '#fff', name: 'Orange' },
-    { color: '#ffbe0b', dark: '#c9960a', label: '#333', name: 'Yellow' },
-    { color: '#06d6a0', dark: '#049a73', label: '#fff', name: 'Green'  },
-    { color: '#118ab2', dark: '#0a6282', label: '#fff', name: 'Blue'   },
-    { color: '#7b2d8b', dark: '#4a1a54', label: '#fff', name: 'Purple' },
-    { color: '#cccccc', dark: '#999999', label: '#555', name: 'White'  },
-    { color: '#333333', dark: '#111111', label: '#fff', name: 'Black'  },
+    { color: '#f4a0b5', sprite: '1 LT PINK CRAYON.png',  name: 'Lt Pink' },
+    { color: '#d93025', sprite: '2 RED CRAYON.png',      name: 'Red'     },
+    { color: '#f97316', sprite: '3 ORANGE CRAYON.png',   name: 'Orange'  },
+    { color: '#fbbf24', sprite: '4 YELLOW CRAYON.png',   name: 'Yellow'  },
+    { color: '#22c55e', sprite: '5 GREEN CRAYON.png',    name: 'Green'   },
+    { color: '#3b82f6', sprite: '6 BLUE CRAYON.png',     name: 'Blue'    },
+    { color: '#c026d3', sprite: '7 DK PINK CRAYON.png',  name: 'Dk Pink' },
+    { color: '#9ca3af', sprite: '8 GREY CRAYON.png',     name: 'Grey'    },
+    { color: '#92400e', sprite: '9 BROWN CRAYON.png',    name: 'Brown'   },
   ];
 
   // ── Resize helpers ───────────────────────────────────────────────────────
@@ -77,92 +82,115 @@
   // ── RAF loop — just two blits per frame ──────────────────────────────────
   function redraw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Blit offscreen shifted by scroll — this is the entire cost of all past strokes
     ctx.drawImage(offscreen, -window.scrollX, -window.scrollY);
-    // Blit the live scratch stroke on top
     ctx.drawImage(scratch, 0, 0);
     requestAnimationFrame(redraw);
   }
   requestAnimationFrame(redraw);
 
+  // ── Seeded pseudo-random — deterministic texture per stroke ──────────────
+  function seededRand(n) {
+    const x = Math.sin(n + 1) * 43758.5453123;
+    return x - Math.floor(x);
+  }
+
+  // ── Core crayon rendering — solid base + scattered grain dots ────────────
+  //
+  // Real crayon wax on paper looks like a mostly-solid stroke with:
+  //   - slightly fuzzy/uneven edges
+  //   - paper texture showing through as tiny gaps (grain)
+  //
+  // We achieve this with two layers:
+  //   1. A solid smooth path at ~0.68 opacity (the main wax body)
+  //   2. Many tiny dots (1–2px) scattered within the stroke width, each at
+  //      very low opacity (0.05–0.14), creating the grainy, papery look
+  //
+  // The seed makes grain positions deterministic so scratch redraws are stable.
+  //
+  function drawCrayonStroke(ctx2d, pts, strokeColor, size, seed) {
+    if (pts.length < 1) return;
+
+    // 1. Main solid stroke — the wax body
+    if (pts.length >= 2) {
+      ctx2d.save();
+      ctx2d.globalAlpha = 0.68;
+      ctx2d.lineWidth   = size;
+      ctx2d.lineCap     = 'round';
+      ctx2d.lineJoin    = 'round';
+      ctx2d.strokeStyle = strokeColor;
+      ctx2d.beginPath();
+      ctx2d.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) {
+        const mx = (pts[i-1].x + pts[i].x) / 2;
+        const my = (pts[i-1].y + pts[i].y) / 2;
+        ctx2d.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mx, my);
+      }
+      ctx2d.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+      ctx2d.stroke();
+      ctx2d.restore();
+    }
+
+    // 2. Grain — tiny dots scattered within the stroke area
+    // 6 grains per sampled point, placed randomly within a circle of radius ≈ brushSize/2
+    const GRAINS = 1;
+    const grainR = 1.3;
+    ctx2d.save();
+    ctx2d.fillStyle = strokeColor;
+    for (let i = 0; i < pts.length; i++) {
+      for (let g = 0; g < GRAINS; g++) {
+        const base  = seed + (i * GRAINS + g) * 3;
+        const angle = seededRand(base)     * Math.PI * 2;
+        const dist  = seededRand(base + 1) * (size / 2) * 0.95;
+        const alpha = seededRand(base + 2) * 0.09 + 0.04; // 0.04–0.13
+        ctx2d.globalAlpha = alpha;
+        ctx2d.beginPath();
+        ctx2d.arc(
+          pts[i].x + Math.cos(angle) * dist,
+          pts[i].y + Math.sin(angle) * dist,
+          grainR, 0, Math.PI * 2
+        );
+        ctx2d.fill();
+      }
+    }
+    ctx2d.restore();
+  }
+
   // ── Bake a completed stroke onto the offscreen canvas ────────────────────
-  // Same clean single-path approach as redrawScratch — no texture, no jitter.
   function bakeStroke(stroke) {
     const pts = stroke.points;
-    if (pts.length < 2) return;
-
-    octx.save();
-    octx.globalAlpha = 0.7;
-    octx.lineWidth   = stroke.size;
-    octx.lineCap     = 'round';
-    octx.lineJoin    = 'round';
-    octx.strokeStyle = stroke.color;
-
-    octx.beginPath();
-    octx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) {
-      const mx = (pts[i-1].x + pts[i].x) / 2;
-      const my = (pts[i-1].y + pts[i].y) / 2;
-      octx.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mx, my);
-    }
-    octx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
-    octx.stroke();
-    octx.restore();
+    if (pts.length < 1) return;
+    drawCrayonStroke(octx, pts, stroke.color, stroke.size, stroke.seed);
   }
 
-  // ── Redraw the entire active stroke onto scratch from stored points ────────
-  // We clear and redraw the whole thing every pointermove so semi-transparent
-  // layers never accumulate and darken as the user draws slowly.
-  function redrawScratch(points) {
+  // ── Redraw the active stroke onto scratch ─────────────────────────────────
+  // Clears and redraws from all stored points so semi-transparent layers
+  // never accumulate and darken as the user draws slowly.
+  function redrawScratch(points, seed) {
     sctx.clearRect(0, 0, scratch.width, scratch.height);
-    if (points.length < 2) return;
+    if (points.length < 1) return;
 
-    // Convert page-space points to viewport space for scratch canvas
+    // Convert page-space points to viewport space for the scratch canvas
     const sx = window.scrollX, sy = window.scrollY;
     const pts = points.map(p => ({ x: p.x - sx, y: p.y - sy }));
-
-    sctx.save();
-    sctx.globalAlpha = 0.7; // single pass, higher alpha to look like crayon
-    sctx.lineWidth   = brushSize;
-    sctx.lineCap     = 'round';
-    sctx.lineJoin    = 'round';
-    sctx.strokeStyle = color;
-
-    // One smooth path through all points — no accumulation, no darkening
-    sctx.beginPath();
-    sctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) {
-      // Smooth curve through midpoints for a natural feel
-      const mx = (pts[i-1].x + pts[i].x) / 2;
-      const my = (pts[i-1].y + pts[i].y) / 2;
-      sctx.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mx, my);
-    }
-    sctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
-    sctx.stroke();
-    sctx.restore();
+    drawCrayonStroke(sctx, pts, color, brushSize, seed);
   }
 
-  // ── Build crayon UI from template ────────────────────────────────────────
+  // ── Build crayon rack from sprite images ──────────────────────────────────
   CRAYONS.forEach(cr => {
     const el = document.createElement('div');
     el.className = 'crayon';
     el.title     = cr.name;
 
-    const template = window.CRAYON_TEMPLATE;
-    if (template) {
-      const id = cr.name.toLowerCase();
-      el.innerHTML = template
-        .replaceAll('{{ID}}',    id)
-        .replaceAll('{{COLOR}}', cr.color)
-        .replaceAll('{{DARK}}',  cr.dark)
-        .replaceAll('{{LABEL}}', cr.label)
-        .replaceAll('{{NAME}}',  cr.name);
-    } else {
-      el.style.cssText = `background:${cr.color};width:130px;height:32px;`;
-    }
+    const img = document.createElement('img');
+    img.src = SPRITE_BASE + cr.sprite;
+    img.alt = cr.name;
+    el.appendChild(img);
 
     el.addEventListener('click', () => {
       color = cr.color;
+      // Update the cursor to show the selected crayon
+      const cursorImg = cursor.querySelector('img');
+      if (cursorImg) cursorImg.src = SPRITE_BASE + cr.sprite;
       document.querySelectorAll('.crayon').forEach(c => c.classList.remove('active'));
       el.classList.add('active');
       startDrawing();
@@ -170,6 +198,14 @@
 
     rack.appendChild(el);
   });
+
+  // ── Swap button and hint elements to use sprites ──────────────────────────
+  stopBtn.innerHTML  = `<img src="${SPRITE_BASE}STOP COLORING BUTTON.png" alt="Stop Coloring">`;
+  clearBtn.innerHTML = `<img src="${SPRITE_BASE}CLEAR BUTTON.png" alt="Clear">`;
+  if (hint) hint.innerHTML = `<img src="${SPRITE_BASE}PICK A CRAYON BUTTON.png" alt="Pick a crayon!">`;
+
+  // Replace emoji cursor with an image (initially the first crayon)
+  cursor.innerHTML = `<img src="${SPRITE_BASE}${CRAYONS[0].sprite}" alt="crayon">`;
 
   // ── Draw mode ────────────────────────────────────────────────────────────
   function startDrawing() {
@@ -194,6 +230,7 @@
     rack.style.pointerEvents   = 'auto';
     stopBtn.style.display      = 'none';
     clearBtn.style.display     = 'none';
+    hint.classList.remove('hidden');
     document.querySelectorAll('.crayon').forEach(c => c.classList.remove('active'));
   }
 
@@ -225,8 +262,8 @@
     resizeOffscreen();
     const page = getPagePos(e);
     lastX = getClientPos(e).x; lastY = getClientPos(e).y;
-    activeStroke = { color, size: brushSize, seed: Math.floor(Math.random()*1e9), points: [page] };
-    redrawScratch(activeStroke.points);
+    activeStroke = { color, size: brushSize, seed: Math.floor(Math.random() * 1e9), points: [page] };
+    redrawScratch(activeStroke.points, activeStroke.seed);
   });
 
   canvas.addEventListener('pointermove', e => {
@@ -234,17 +271,17 @@
     cursor.style.left = client.x + 'px';
     cursor.style.top  = client.y + 'px';
     if (!drawing || !isDown || !activeStroke) return;
-    if (Math.hypot(client.x-lastX, client.y-lastY) > 2) {
+    if (Math.hypot(client.x - lastX, client.y - lastY) > 2) {
       activeStroke.points.push(getPagePos(e));
-      redrawScratch(activeStroke.points);
+      redrawScratch(activeStroke.points, activeStroke.seed);
       lastX = client.x; lastY = client.y;
     }
   });
 
   function commitStroke() {
     isDown = false;
-    if (activeStroke && activeStroke.points.length >= 2) {
-      bakeStroke(activeStroke); // write once to offscreen
+    if (activeStroke && activeStroke.points.length >= 1) {
+      bakeStroke(activeStroke);
     }
     activeStroke = null;
     sctx.clearRect(0, 0, scratch.width, scratch.height);
