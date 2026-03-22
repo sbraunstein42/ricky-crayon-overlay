@@ -1,5 +1,24 @@
 (function () {
 
+  // ── Crayon texture controls ───────────────────────────────────────────────
+  const HOLE_SPACING   = 9;    // px between holes along the stroke (lower = more frequent)
+  const HOLE_WIDTH_MIN = 0.0; // narrowest hole width as fraction of brush size
+  const HOLE_WIDTH_MAX = 0.1; // widest hole width as fraction of brush size
+  const HOLE_HEIGHT    = 0.5; // hole height as fraction of brush size (0.5 = exactly radius)
+  const HOLE_VERTS     = 9;    // vertices per jagged hole polygon
+  const HOLE_JITTER    = 0.70; // raggedness: 0 = smooth ellipse, 1 = very spiky
+
+  const STROKE_WIDTH_MIN   = 0.90; // narrowest point as fraction of brushSize
+  const STROKE_WIDTH_MAX   = 1.10; // widest point as fraction of brushSize
+  const STROKE_EDGE_JITTER = 0.38; // per-point edge roughness as fraction of brushSize (0 = smooth)
+
+  const BAKE_INTERVAL  = 150;  // px: auto-bake stroke into the canvas every N pixels to protect old marks
+
+  const HOLE_ANGLE_MIN = -.5;   // min extra hole rotation in radians
+  const HOLE_ANGLE_MAX = .5;   // max extra hole rotation in radians
+  const HOLE_TAPER_MIN = -.75;   // min taper: 0 = symmetric, -1 = flipped triangle
+  const HOLE_TAPER_MAX = .75;   // max taper: 1 = triangle, higher = more extreme
+
   // ── Sprite base URL (resolves relative to this script, works locally + GitHub Pages) ──
   const _s = document.currentScript;
   const SPRITE_BASE = _s ? _s.src.replace(/\/[^\/]+$/, '/') + 'sprites/' : 'sprites/';
@@ -94,25 +113,39 @@
     return x - Math.floor(x);
   }
 
-  // ── Core chalk rendering — filled polygon with jittered edges ────────────
+  // ── Jagged hole shape — irregular polygon approximating an ellipse ───────
+  function jaggedHole(ctx2d, cx, cy, hw, hh, angle, seed) {
+    const angleOffset = HOLE_ANGLE_MIN + seededRand(seed + 40) * (HOLE_ANGLE_MAX - HOLE_ANGLE_MIN);
+    const taper       = HOLE_TAPER_MIN + seededRand(seed + 41) * (HOLE_TAPER_MAX - HOLE_TAPER_MIN);
+    const a = angle + angleOffset;
+    ctx2d.beginPath();
+    for (let v = 0; v < HOLE_VERTS; v++) {
+      const t    = (v / HOLE_VERTS) * Math.PI * 2;
+      const sinT = Math.sin(t);
+      const taperedHW = hw * (1 + taper * sinT);
+      const r    = 1 + (seededRand(seed + v * 3) - 0.5) * HOLE_JITTER * 2;
+      const ex   = Math.cos(t) * taperedHW * r;
+      const ey   = sinT        * hh        * r;
+      const x    = cx + ex * Math.cos(a) - ey * Math.sin(a);
+      const y    = cy + ex * Math.sin(a) + ey * Math.cos(a);
+      v === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+    }
+    ctx2d.closePath();
+    ctx2d.fill();
+  }
+
+  // ── Core crayon rendering — filled shape with paper-grain holes ─────────
   //
-  // Real chalk on a chalkboard is a single opaque mark with rough, uneven edges.
-  // We model it as a filled polygon rather than a stroked line:
+  // A crayon on paper is a single opaque-ish wax mark with slightly rough
+  // edges and paper grain showing through as thin gaps.
+  // We fill a jittered polygon, then destination-out thin slices across it.
   //
-  //   For each input point we compute a perpendicular unit vector, then offset
-  //   left and right by (radius + seeded jitter). The resulting polygon is
-  //   filled at full opacity — one fill call, no transparency, naturally uneven.
-  //   Two filled circles cap the start and end.
-  //
-  // The seed keeps jitter deterministic so scratch redraws are stable.
-  //
-  function drawChalkStroke(ctx2d, pts, strokeColor, size, seed) {
+  function drawCrayonStroke(ctx2d, pts, strokeColor, size, seed) {
     if (pts.length < 1) return;
-
     const r = size / 2;
-
     ctx2d.save();
-    ctx2d.fillStyle = strokeColor;
+    ctx2d.globalAlpha = 0.92;
+    ctx2d.fillStyle   = strokeColor;
 
     if (pts.length === 1) {
       ctx2d.beginPath();
@@ -122,27 +155,30 @@
       return;
     }
 
-    // Build left and right edge arrays with seeded perpendicular jitter
+    // Jittered left/right edges with smoothly-varying width along the stroke
     const left  = new Array(pts.length);
     const right = new Array(pts.length);
-
     for (let i = 0; i < pts.length; i++) {
       const prev = pts[i > 0 ? i - 1 : 0];
       const next = pts[i < pts.length - 1 ? i + 1 : pts.length - 1];
-      const dx  = next.x - prev.x;
-      const dy  = next.y - prev.y;
+      const dx = next.x - prev.x, dy = next.y - prev.y;
       const len = Math.hypot(dx, dy) || 1;
-      const px  = -dy / len;   // perpendicular unit vector
-      const py  =  dx / len;
+      const px = -dy / len, py = dx / len;
 
-      const jL = (seededRand(seed + i * 3)     - 0.5) * size * 0.4;
-      const jR = (seededRand(seed + i * 3 + 1) - 0.5) * size * 0.4;
+      // Smooth width variation: linearly interpolate between two slow samples
+      const k  = i / 5;
+      const k0 = Math.floor(k), k1 = k0 + 1;
+      const v0 = seededRand(seed + k0 * 11 + 200);
+      const v1 = seededRand(seed + k1 * 11 + 200);
+      const wave = v0 + (v1 - v0) * (k - k0);
+      const wR = r * (STROKE_WIDTH_MIN + wave * (STROKE_WIDTH_MAX - STROKE_WIDTH_MIN));
 
-      left[i]  = { x: pts[i].x + px * (r + jL), y: pts[i].y + py * (r + jL) };
-      right[i] = { x: pts[i].x - px * (r + jR), y: pts[i].y - py * (r + jR) };
+      const jL = (seededRand(seed + i * 3)     - 0.5) * size * STROKE_EDGE_JITTER;
+      const jR = (seededRand(seed + i * 3 + 1) - 0.5) * size * STROKE_EDGE_JITTER;
+      left[i]  = { x: pts[i].x + px * (wR + jL), y: pts[i].y + py * (wR + jL) };
+      right[i] = { x: pts[i].x - px * (wR + jR), y: pts[i].y - py * (wR + jR) };
     }
 
-    // Filled polygon: left side forward, right side backward
     ctx2d.beginPath();
     ctx2d.moveTo(left[0].x, left[0].y);
     for (let i = 1; i < pts.length; i++) ctx2d.lineTo(left[i].x, left[i].y);
@@ -150,28 +186,73 @@
     ctx2d.closePath();
     ctx2d.fill();
 
-    // Round end caps
     ctx2d.beginPath();
     ctx2d.arc(pts[0].x, pts[0].y, r, 0, Math.PI * 2);
     ctx2d.fill();
-
     ctx2d.beginPath();
     ctx2d.arc(pts[pts.length - 1].x, pts[pts.length - 1].y, r, 0, Math.PI * 2);
     ctx2d.fill();
+
+    // Paper grain: jagged holes spaced by distance along the stroke
+    ctx2d.globalCompositeOperation = 'destination-out';
+    ctx2d.globalAlpha = 1;
+    ctx2d.fillStyle   = 'black';
+    let dist     = 0;
+    let nextHole = seededRand(seed + 500) * HOLE_SPACING;
+    let holeIdx  = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const sdx = pts[i].x - pts[i - 1].x;
+      const sdy = pts[i].y - pts[i - 1].y;
+      const segLen = Math.hypot(sdx, sdy);
+      dist += segLen;
+      while (dist >= nextHole) {
+        const t  = segLen > 0 ? 1 - (dist - nextHole) / segLen : 0;
+        const hx = pts[i - 1].x + sdx * t;
+        const hy = pts[i - 1].y + sdy * t;
+        const angle = Math.atan2(sdy, sdx);
+        const hw = size * (HOLE_WIDTH_MIN + seededRand(seed + holeIdx * 5 + 1) * (HOLE_WIDTH_MAX - HOLE_WIDTH_MIN));
+        const hh = size * (HOLE_HEIGHT + seededRand(seed + holeIdx * 5 + 2) * 0.08);
+        jaggedHole(ctx2d, hx, hy, hw, hh, angle, seed + holeIdx * 17);
+        nextHole += HOLE_SPACING + (seededRand(seed + holeIdx * 5 + 3) - 0.5) * HOLE_SPACING * 0.4;
+        holeIdx++;
+      }
+    }
 
     ctx2d.restore();
   }
 
   // ── Bake a completed stroke onto the offscreen canvas ────────────────────
+  // Uses a temp canvas so destination-out holes only cut through this stroke,
+  // not previously baked content on octx.
   function bakeStroke(stroke) {
     const pts = stroke.points;
     if (pts.length < 1) return;
-    drawChalkStroke(octx, pts, stroke.color, stroke.size, stroke.seed);
+
+    let minX = pts[0].x, minY = pts[0].y, maxX = pts[0].x, maxY = pts[0].y;
+    for (let i = 1; i < pts.length; i++) {
+      if (pts[i].x < minX) minX = pts[i].x;
+      if (pts[i].y < minY) minY = pts[i].y;
+      if (pts[i].x > maxX) maxX = pts[i].x;
+      if (pts[i].y > maxY) maxY = pts[i].y;
+    }
+    const pad = stroke.size * 2;
+    minX = Math.max(0,                Math.floor(minX - pad));
+    minY = Math.max(0,                Math.floor(minY - pad));
+    maxX = Math.min(offscreen.width,  Math.ceil(maxX  + pad));
+    maxY = Math.min(offscreen.height, Math.ceil(maxY  + pad));
+
+    const tmp    = document.createElement('canvas');
+    tmp.width    = maxX - minX;
+    tmp.height   = maxY - minY;
+    const tmpCtx = tmp.getContext('2d');
+    const localPts = pts.map(p => ({ x: p.x - minX, y: p.y - minY }));
+    drawCrayonStroke(tmpCtx, localPts, stroke.color, stroke.size, stroke.seed);
+    octx.drawImage(tmp, minX, minY);
   }
 
   // ── Redraw the active stroke onto scratch ─────────────────────────────────
-  // Clears and redraws from all stored points so semi-transparent layers
-  // never accumulate and darken as the user draws slowly.
+  // Clears and redraws from all stored points so strands never
+  // accumulate and darken as the user draws slowly.
   function redrawScratch(points, seed) {
     sctx.clearRect(0, 0, scratch.width, scratch.height);
     if (points.length < 1) return;
@@ -179,7 +260,7 @@
     // Convert page-space points to viewport space for the scratch canvas
     const sx = window.scrollX, sy = window.scrollY;
     const pts = points.map(p => ({ x: p.x - sx, y: p.y - sy }));
-    drawChalkStroke(sctx, pts, color, brushSize, seed);
+    drawCrayonStroke(sctx, pts, color, brushSize, seed);
   }
 
   // ── Build crayon rack from sprite images ──────────────────────────────────
@@ -269,7 +350,7 @@
     resizeOffscreen();
     const page = getPagePos(e);
     lastX = getClientPos(e).x; lastY = getClientPos(e).y;
-    activeStroke = { color, size: brushSize, seed: Math.floor(Math.random() * 1e9), points: [page] };
+    activeStroke = { color, size: brushSize, seed: Math.floor(Math.random() * 1e9), points: [page], dist: 0 };
     redrawScratch(activeStroke.points, activeStroke.seed);
   });
 
@@ -278,8 +359,24 @@
     cursor.style.left = client.x + 'px';
     cursor.style.top  = client.y + 'px';
     if (!drawing || !isDown || !activeStroke) return;
-    if (Math.hypot(client.x - lastX, client.y - lastY) > 2) {
+    const moved = Math.hypot(client.x - lastX, client.y - lastY);
+    if (moved > 2) {
       activeStroke.points.push(getPagePos(e));
+      activeStroke.dist += moved;
+
+      // Auto-bake when the stroke gets long enough — protects old marks from
+      // accumulating too many holes. Carry the last 2 points into the new segment
+      // so the seam is seamless.
+      if (activeStroke.dist >= BAKE_INTERVAL && activeStroke.points.length > 2) {
+        bakeStroke(activeStroke);
+        activeStroke = {
+          color, size: brushSize,
+          seed: Math.floor(Math.random() * 1e9),
+          points: activeStroke.points.slice(-2),
+          dist: 0,
+        };
+      }
+
       redrawScratch(activeStroke.points, activeStroke.seed);
       lastX = client.x; lastY = client.y;
     }
