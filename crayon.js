@@ -94,93 +94,71 @@
     return x - Math.floor(x);
   }
 
-  // ── Core crayon rendering — solid base + scattered grain dots ────────────
+  // ── Core chalk rendering — filled polygon with jittered edges ────────────
   //
-  // Real crayon wax on paper looks like a mostly-solid stroke with:
-  //   - slightly fuzzy/uneven edges
-  //   - paper texture showing through as tiny gaps (grain)
+  // Real chalk on a chalkboard is a single opaque mark with rough, uneven edges.
+  // We model it as a filled polygon rather than a stroked line:
   //
-  // We achieve this with three layers:
-  //   1. A solid smooth path at ~0.68 opacity (the main wax body)
-  //   2. A second path drawn over the same route but with each point jittered
-  //      slightly perpendicular to the travel direction — at wider lineWidth and
-  //      lower opacity, this roughens the edges without any extra draw calls per
-  //      point (still a single O(n) path, very cheap)
-  //   3. Tiny dots within the stroke width at very low opacity (grain/texture)
+  //   For each input point we compute a perpendicular unit vector, then offset
+  //   left and right by (radius + seeded jitter). The resulting polygon is
+  //   filled at full opacity — one fill call, no transparency, naturally uneven.
+  //   Two filled circles cap the start and end.
   //
-  // The seed makes all randomness deterministic so scratch redraws are stable.
+  // The seed keeps jitter deterministic so scratch redraws are stable.
   //
-  function drawCrayonStroke(ctx2d, pts, strokeColor, size, seed) {
+  function drawChalkStroke(ctx2d, pts, strokeColor, size, seed) {
     if (pts.length < 1) return;
 
-    // 1. Main solid stroke — the wax body
-    if (pts.length >= 2) {
-      ctx2d.save();
-      ctx2d.globalAlpha = 0.68;
-      ctx2d.lineWidth   = size;
-      ctx2d.lineCap     = 'round';
-      ctx2d.lineJoin    = 'round';
-      ctx2d.strokeStyle = strokeColor;
-      ctx2d.beginPath();
-      ctx2d.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) {
-        const mx = (pts[i-1].x + pts[i].x) / 2;
-        const my = (pts[i-1].y + pts[i].y) / 2;
-        ctx2d.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mx, my);
-      }
-      ctx2d.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
-      ctx2d.stroke();
-      ctx2d.restore();
-    }
+    const r = size / 2;
 
-    // 2. Jagged-edge pass — same path but each point nudged perpendicular to
-    //    travel direction by a seeded random amount. Drawn wider + semi-transparent
-    //    so it bleeds outside the main stroke and breaks up the clean edge.
-    if (pts.length >= 2) {
-      ctx2d.save();
-      ctx2d.globalAlpha = 0.30;
-      ctx2d.lineWidth   = size * 1.22;
-      ctx2d.lineCap     = 'round';
-      ctx2d.lineJoin    = 'round';
-      ctx2d.strokeStyle = strokeColor;
-      ctx2d.beginPath();
-      ctx2d.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) {
-        const dx  = pts[i].x - pts[i-1].x;
-        const dy  = pts[i].y - pts[i-1].y;
-        const len = Math.hypot(dx, dy) || 1;
-        // Perpendicular unit vector
-        const px  = -dy / len;
-        const py  =  dx / len;
-        const jitter = (seededRand(seed + i * 2 + 77) - 0.5) * size * 0.45;
-        ctx2d.lineTo(pts[i].x + px * jitter, pts[i].y + py * jitter);
-      }
-      ctx2d.stroke();
-      ctx2d.restore();
-    }
-
-    // 3. Grain — tiny dots scattered within the stroke area
-    // 6 grains per sampled point, placed randomly within a circle of radius ≈ brushSize/2
-    const GRAINS = 1;
-    const grainR = 1.3;
     ctx2d.save();
     ctx2d.fillStyle = strokeColor;
-    for (let i = 0; i < pts.length; i++) {
-      for (let g = 0; g < GRAINS; g++) {
-        const base  = seed + (i * GRAINS + g) * 3;
-        const angle = seededRand(base)     * Math.PI * 2;
-        const dist  = seededRand(base + 1) * (size / 2) * 0.95;
-        const alpha = seededRand(base + 2) * 0.09 + 0.04; // 0.04–0.13
-        ctx2d.globalAlpha = alpha;
-        ctx2d.beginPath();
-        ctx2d.arc(
-          pts[i].x + Math.cos(angle) * dist,
-          pts[i].y + Math.sin(angle) * dist,
-          grainR, 0, Math.PI * 2
-        );
-        ctx2d.fill();
-      }
+
+    if (pts.length === 1) {
+      ctx2d.beginPath();
+      ctx2d.arc(pts[0].x, pts[0].y, r, 0, Math.PI * 2);
+      ctx2d.fill();
+      ctx2d.restore();
+      return;
     }
+
+    // Build left and right edge arrays with seeded perpendicular jitter
+    const left  = new Array(pts.length);
+    const right = new Array(pts.length);
+
+    for (let i = 0; i < pts.length; i++) {
+      const prev = pts[i > 0 ? i - 1 : 0];
+      const next = pts[i < pts.length - 1 ? i + 1 : pts.length - 1];
+      const dx  = next.x - prev.x;
+      const dy  = next.y - prev.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const px  = -dy / len;   // perpendicular unit vector
+      const py  =  dx / len;
+
+      const jL = (seededRand(seed + i * 3)     - 0.5) * size * 0.4;
+      const jR = (seededRand(seed + i * 3 + 1) - 0.5) * size * 0.4;
+
+      left[i]  = { x: pts[i].x + px * (r + jL), y: pts[i].y + py * (r + jL) };
+      right[i] = { x: pts[i].x - px * (r + jR), y: pts[i].y - py * (r + jR) };
+    }
+
+    // Filled polygon: left side forward, right side backward
+    ctx2d.beginPath();
+    ctx2d.moveTo(left[0].x, left[0].y);
+    for (let i = 1; i < pts.length; i++) ctx2d.lineTo(left[i].x, left[i].y);
+    for (let i = pts.length - 1; i >= 0; i--) ctx2d.lineTo(right[i].x, right[i].y);
+    ctx2d.closePath();
+    ctx2d.fill();
+
+    // Round end caps
+    ctx2d.beginPath();
+    ctx2d.arc(pts[0].x, pts[0].y, r, 0, Math.PI * 2);
+    ctx2d.fill();
+
+    ctx2d.beginPath();
+    ctx2d.arc(pts[pts.length - 1].x, pts[pts.length - 1].y, r, 0, Math.PI * 2);
+    ctx2d.fill();
+
     ctx2d.restore();
   }
 
@@ -188,7 +166,7 @@
   function bakeStroke(stroke) {
     const pts = stroke.points;
     if (pts.length < 1) return;
-    drawCrayonStroke(octx, pts, stroke.color, stroke.size, stroke.seed);
+    drawChalkStroke(octx, pts, stroke.color, stroke.size, stroke.seed);
   }
 
   // ── Redraw the active stroke onto scratch ─────────────────────────────────
@@ -201,7 +179,7 @@
     // Convert page-space points to viewport space for the scratch canvas
     const sx = window.scrollX, sy = window.scrollY;
     const pts = points.map(p => ({ x: p.x - sx, y: p.y - sy }));
-    drawCrayonStroke(sctx, pts, color, brushSize, seed);
+    drawChalkStroke(sctx, pts, color, brushSize, seed);
   }
 
   // ── Build crayon rack from sprite images ──────────────────────────────────
