@@ -1,15 +1,14 @@
 (function () {
 
   // ── Crayon texture controls ───────────────────────────────────────────────
-  const HOLE_SPACING   = 9;    // px between holes along the stroke (lower = more frequent)
-  const HOLE_WIDTH_MIN = 0.0; // narrowest hole width as fraction of brush size
-  const HOLE_WIDTH_MAX = 0.1; // widest hole width as fraction of brush size
-  const HOLE_HEIGHT    = 0.5; // hole height as fraction of brush size (0.5 = exactly radius)
+  const HOLES_PER_INCH = 100;   // hole density (96px = 1 inch at standard screen DPI)
+  const HOLE_SIZE_MIN  = 0.03; // smallest hole radius as fraction of brush size
+  const HOLE_SIZE_MAX  = 0.15; // largest hole radius as fraction of brush size
   const HOLE_VERTS     = 9;    // vertices per jagged hole polygon
-  const HOLE_JITTER    = 0.70; // raggedness: 0 = smooth ellipse, 1 = very spiky
+  const HOLE_JITTER    = 0.70; // raggedness: 0 = smooth circle, 1 = very spiky
 
-  const STROKE_WIDTH_MIN   = 0.90; // narrowest point as fraction of brushSize
-  const STROKE_WIDTH_MAX   = 1.10; // widest point as fraction of brushSize
+  const STROKE_WIDTH_MIN   = 0.70; // narrowest point as fraction of brushSize
+  const STROKE_WIDTH_MAX   = 1.30; // widest point as fraction of brushSize
   const STROKE_EDGE_JITTER = 0.38; // per-point edge roughness as fraction of brushSize (0 = smooth)
 
   const BAKE_INTERVAL  = 150;  // px: auto-bake stroke into the canvas every N pixels to protect old marks
@@ -193,12 +192,13 @@
     ctx2d.arc(pts[pts.length - 1].x, pts[pts.length - 1].y, r, 0, Math.PI * 2);
     ctx2d.fill();
 
-    // Paper grain: jagged holes spaced by distance along the stroke
+    // Static grain: small jagged holes scattered anywhere across the stroke height
     ctx2d.globalCompositeOperation = 'destination-out';
     ctx2d.globalAlpha = 1;
     ctx2d.fillStyle   = 'black';
+    const holeSpacing = 96 / HOLES_PER_INCH; // px between holes (96px ≈ 1 inch)
     let dist     = 0;
-    let nextHole = seededRand(seed + 500) * HOLE_SPACING;
+    let nextHole = seededRand(seed + 500) * holeSpacing;
     let holeIdx  = 0;
     for (let i = 1; i < pts.length; i++) {
       const sdx = pts[i].x - pts[i - 1].x;
@@ -206,14 +206,15 @@
       const segLen = Math.hypot(sdx, sdy);
       dist += segLen;
       while (dist >= nextHole) {
-        const t  = segLen > 0 ? 1 - (dist - nextHole) / segLen : 0;
-        const hx = pts[i - 1].x + sdx * t;
-        const hy = pts[i - 1].y + sdy * t;
+        const t     = segLen > 0 ? 1 - (dist - nextHole) / segLen : 0;
         const angle = Math.atan2(sdy, sdx);
-        const hw = size * (HOLE_WIDTH_MIN + seededRand(seed + holeIdx * 5 + 1) * (HOLE_WIDTH_MAX - HOLE_WIDTH_MIN));
-        const hh = size * (HOLE_HEIGHT + seededRand(seed + holeIdx * 5 + 2) * 0.08);
-        jaggedHole(ctx2d, hx, hy, hw, hh, angle, seed + holeIdx * 17);
-        nextHole += HOLE_SPACING + (seededRand(seed + holeIdx * 5 + 3) - 0.5) * HOLE_SPACING * 0.4;
+        // Random perpendicular offset — scatter holes anywhere across the stroke height
+        const perp  = (seededRand(seed + holeIdx * 5 + 4) - 0.5) * size * 0.85;
+        const hx    = pts[i - 1].x + sdx * t - Math.sin(angle) * perp;
+        const hy    = pts[i - 1].y + sdy * t + Math.cos(angle) * perp;
+        const hSize = size * (HOLE_SIZE_MIN + seededRand(seed + holeIdx * 5 + 1) * (HOLE_SIZE_MAX - HOLE_SIZE_MIN));
+        jaggedHole(ctx2d, hx, hy, hSize, hSize, angle, seed + holeIdx * 17);
+        nextHole += holeSpacing + (seededRand(seed + holeIdx * 5 + 3) - 0.5) * holeSpacing * 0.4;
         holeIdx++;
       }
     }
