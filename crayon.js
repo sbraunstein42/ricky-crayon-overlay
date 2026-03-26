@@ -7,8 +7,8 @@
   const HOLE_VERTS     = 9;    // vertices per jagged hole polygon
   const HOLE_JITTER    = 0.70; // raggedness: 0 = smooth circle, 1 = very spiky
 
-  const STROKE_WIDTH_MIN   = 1; // narrowest point as fraction of brushSize
-  const STROKE_WIDTH_MAX   = 1.60; // widest point as fraction of brushSize
+  const STROKE_WIDTH_MIN   = 0.70; // narrowest point as fraction of brushSize
+  const STROKE_WIDTH_MAX   = 1.30; // widest point as fraction of brushSize
   const STROKE_EDGE_JITTER = 0.38; // per-point edge roughness as fraction of brushSize (0 = smooth)
 
   const BAKE_INTERVAL  = 150;  // px: auto-bake stroke into the canvas every N pixels to protect old marks
