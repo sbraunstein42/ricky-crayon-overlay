@@ -7,8 +7,8 @@
   const HOLE_VERTS     = 9;    // vertices per jagged hole polygon
   const HOLE_JITTER    = 0.70; // raggedness: 0 = smooth circle, 1 = very spiky
 
-  const STROKE_WIDTH_MIN   = 0.70; // narrowest point as fraction of brushSize
-  const STROKE_WIDTH_MAX   = 1.30; // widest point as fraction of brushSize
+  const STROKE_WIDTH_MIN   = 1; // narrowest point as fraction of brushSize
+  const STROKE_WIDTH_MAX   = 1.60; // widest point as fraction of brushSize
   const STROKE_EDGE_JITTER = 0.38; // per-point edge roughness as fraction of brushSize (0 = smooth)
 
   const BAKE_INTERVAL  = 150;  // px: auto-bake stroke into the canvas every N pixels to protect old marks
@@ -17,6 +17,15 @@
   const HOLE_ANGLE_MAX = .5;   // max extra hole rotation in radians
   const HOLE_TAPER_MIN = -.75;   // min taper: 0 = symmetric, -1 = flipped triangle
   const HOLE_TAPER_MAX = .75;   // max taper: 1 = triangle, higher = more extreme
+
+  // ── Cursor offset — shift where the crayon tip aligns with the pointer ────
+  // Positive X moves the tip right, positive Y moves it down.
+  const CURSOR_OFFSET_X = 8;   // px horizontal
+  const CURSOR_OFFSET_Y = -13;  // px vertical
+
+  // ── Stroke transparency ───────────────────────────────────────────────────
+  const SHOW_ALPHA_SLIDER = true;   // set false to hide the slider entirely
+  let   strokeAlpha       = 0.92;   // default opacity (0 = invisible, 1 = fully opaque)
 
   // ── Sprite base URL (resolves relative to this script, works locally + GitHub Pages) ──
   const _s = document.currentScript;
@@ -143,7 +152,7 @@
     if (pts.length < 1) return;
     const r = size / 2;
     ctx2d.save();
-    ctx2d.globalAlpha = 0.92;
+    ctx2d.globalAlpha = strokeAlpha;
     ctx2d.fillStyle   = strokeColor;
 
     if (pts.length === 1) {
@@ -357,8 +366,8 @@
 
   canvas.addEventListener('pointermove', e => {
     const client = getClientPos(e);
-    cursor.style.left = client.x + 'px';
-    cursor.style.top  = client.y + 'px';
+    cursor.style.left = (client.x + CURSOR_OFFSET_X) + 'px';
+    cursor.style.top  = (client.y + CURSOR_OFFSET_Y) + 'px';
     if (!drawing || !isDown || !activeStroke) return;
     const moved = Math.hypot(client.x - lastX, client.y - lastY);
     if (moved > 2) {
@@ -397,8 +406,61 @@
 
   window.addEventListener('mousemove', e => {
     if (drawing) return;
-    cursor.style.left = e.clientX + 'px';
-    cursor.style.top  = e.clientY + 'px';
+    cursor.style.left = (e.clientX + CURSOR_OFFSET_X) + 'px';
+    cursor.style.top  = (e.clientY + CURSOR_OFFSET_Y) + 'px';
   });
+
+  // ── Opacity slider (client preview tool — set SHOW_ALPHA_SLIDER = false to hide) ──
+  if (SHOW_ALPHA_SLIDER) {
+    const panel = document.createElement('div');
+    panel.id = 'crayon-alpha-panel';
+    Object.assign(panel.style, {
+      position:     'fixed',
+      bottom:       '20px',
+      right:        '20px',
+      zIndex:       '10002',
+      background:   'rgba(255,255,255,0.90)',
+      border:       '1px solid #ccc',
+      borderRadius: '10px',
+      padding:      '10px 16px 12px',
+      boxShadow:    '0 2px 10px rgba(0,0,0,0.18)',
+      fontFamily:   'sans-serif',
+      fontSize:     '12px',
+      color:        '#333',
+      userSelect:   'none',
+      lineHeight:   '1.4',
+    });
+
+    const label = document.createElement('div');
+    label.textContent = 'Stroke opacity';
+    label.style.marginBottom = '6px';
+
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.gap = '8px';
+
+    const slider = document.createElement('input');
+    slider.type  = 'range';
+    slider.min   = '0';
+    slider.max   = '100';
+    slider.value = Math.round(strokeAlpha * 100);
+    slider.style.width = '130px';
+
+    const valueLabel = document.createElement('span');
+    valueLabel.textContent = slider.value + '%';
+    valueLabel.style.minWidth = '34px';
+
+    slider.addEventListener('input', () => {
+      strokeAlpha = slider.value / 100;
+      valueLabel.textContent = slider.value + '%';
+    });
+
+    row.appendChild(slider);
+    row.appendChild(valueLabel);
+    panel.appendChild(label);
+    panel.appendChild(row);
+    document.body.appendChild(panel);
+  }
 
 })();
