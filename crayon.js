@@ -342,16 +342,26 @@
   // ── Pointer events ────────────────────────────────────────────────────────
   let activeStroke = null;
 
-  function getPagePos(e) {
-    const cx = e.touches ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: cx + window.scrollX, y: cy + window.scrollY };
+  // Raw viewport coordinates — used to position fixed DOM elements like the cursor.
+  function getViewportPos(e) {
+    const touch = e.touches ? e.touches[0] : e;
+    return { x: touch.clientX, y: touch.clientY };
   }
+
+  // Canvas-local pixel coordinates — accounts for the canvas's actual position
+  // and CSS scale relative to the viewport. Fixes offset on mobile / Wix.
   function getClientPos(e) {
+    const touch = e.touches ? e.touches[0] : e;
+    const rect  = canvas.getBoundingClientRect();
     return {
-      x: e.touches ? e.touches[0].clientX : e.clientX,
-      y: e.touches ? e.touches[0].clientY : e.clientY,
+      x: (touch.clientX - rect.left) * (canvas.width  / rect.width),
+      y: (touch.clientY - rect.top)  * (canvas.height / rect.height),
     };
+  }
+
+  function getPagePos(e) {
+    const client = getClientPos(e);
+    return { x: client.x + window.scrollX, y: client.y + window.scrollY };
   }
 
   canvas.addEventListener('pointerdown', e => {
@@ -365,9 +375,10 @@
   });
 
   canvas.addEventListener('pointermove', e => {
+    const vp     = getViewportPos(e);
     const client = getClientPos(e);
-    cursor.style.left = (client.x + CURSOR_OFFSET_X) + 'px';
-    cursor.style.top  = (client.y + CURSOR_OFFSET_Y) + 'px';
+    cursor.style.left = (vp.x + CURSOR_OFFSET_X) + 'px';
+    cursor.style.top  = (vp.y + CURSOR_OFFSET_Y) + 'px';
     if (!drawing || !isDown || !activeStroke) return;
     const moved = Math.hypot(client.x - lastX, client.y - lastY);
     if (moved > 2) {
