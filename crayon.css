@@ -124,7 +124,7 @@
 #hint {
   position: fixed;
   left: 20px;
-  top: 24px;
+  top: 110px;
   z-index: 10000;
   opacity: 1;
   transition: opacity .5s;
