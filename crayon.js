@@ -24,8 +24,8 @@
   const CURSOR_OFFSET_Y = -13;  // px vertical
 
   // ── Stroke transparency ───────────────────────────────────────────────────
-  const SHOW_ALPHA_SLIDER = true;   // set false to hide the slider entirely
-  let   strokeAlpha       = 0.92;   // default opacity (0 = invisible, 1 = fully opaque)
+  const SHOW_ALPHA_SLIDER = false;  // set false to hide the slider entirely
+  let   strokeAlpha       = 0.60;   // default opacity (0 = invisible, 1 = fully opaque)
 
   // ── Sprite base URL (resolves relative to this script, works locally + GitHub Pages) ──
   const _s = document.currentScript;

@@ -12,12 +12,11 @@
   cursor: none;
 }
 
-/* ── CRAYON RACK — left edge, vertically centered ── */
+/* ── CRAYON RACK — bottom left corner ── */
 #crayon-rack {
   position: fixed;
   left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 100px;
   z-index: 10000;
   display: flex;
   flex-direction: column;
