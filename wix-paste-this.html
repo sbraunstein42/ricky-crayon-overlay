@@ -9,7 +9,20 @@
   Then update the URLs below to match your GitHub Pages address.
   ============================================================
 -->
-<link rel="stylesheet" href="https://sbraunstein42.github.io/ricky-crayon-overlay/crayon.css">
+<script>
+  // Cache busts once per day — users get the latest version within 24 hours
+  var d = new Date();
+  var v = d.getFullYear() + '' + (d.getMonth() + 1).toString().padStart(2, '0') + d.getDate().toString().padStart(2, '0');
+
+  var css = document.createElement('link');
+  css.rel  = 'stylesheet';
+  css.href = 'https://sbraunstein42.github.io/ricky-crayon-overlay/crayon.css?v=' + v;
+  document.head.appendChild(css);
+
+  var js  = document.createElement('script');
+  js.src  = 'https://sbraunstein42.github.io/ricky-crayon-overlay/crayon.js?v=' + v;
+  document.head.appendChild(js);
+</script>
 
 <canvas id="crayon-canvas"></canvas>
 <div id="crayon-cursor">🖍️</div>
@@ -17,5 +30,3 @@
 <div id="crayon-rack"></div>
 <button id="stop-btn">🛑 Stop Drawing</button>
 <button id="clear-btn">🗑️ Clear</button>
-
-<script src="https://sbraunstein42.github.io/ricky-crayon-overlay/crayon.js"></script>
